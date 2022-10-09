@@ -861,7 +861,7 @@ frappe.views.ListView = class ListView extends frappe.views.BaseList {
 	get_meta_html(doc) {
 		let html = "";
 
-		let settings_button = null;
+		let settings_button = "";
 		if (this.settings.button && this.settings.button.show(doc)) {
 			settings_button = `
 				<span class="list-actions">
@@ -871,6 +871,32 @@ frappe.views.ListView = class ListView extends frappe.views.BaseList {
 						${this.settings.button.get_label(doc)}
 					</button>
 				</span>
+			`;
+		}
+
+		let dropdown_button = "";
+		if (this.settings.dropdown_button) {
+			let button_actions = "";
+
+			let button_idx = 0;
+			for (const button of this.settings.dropdown_button.buttons) {
+				// add an index to the dropdown action to identify while calling actions
+				button.idx = button_idx++;
+				button_actions += `
+					<a class="dropdown-item" href="#" onclick="return false;" data-idx="${doc._idx}" data-button-idx="${button.idx}" data-label="${button.label}">${button.label}</a>
+				`;
+			}
+
+			dropdown_button = `
+				<div class="inner-group-button mr-2" data-name="${doc.name}" data-label="${
+				this.settings.dropdown_button.label
+			}">
+					<button type="button" class="btn btn-xs btn-default ellipsis" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+						${this.settings.dropdown_button.label}
+						${frappe.utils.icon("select", "xs")}
+					</button>
+					<div role="menu" class="dropdown-menu">${button_actions}</div>
+				</div>
 			`;
 		}
 
@@ -895,8 +921,8 @@ frappe.views.ListView = class ListView extends frappe.views.BaseList {
 
 		html += `
 			<div class="level-item list-row-activity hidden-xs">
-				<div class="hidden-md hidden-xs">
-					${settings_button || assigned_to}
+				<div class="hidden-md hidden-xs d-flex align-items-center">
+					${settings_button + dropdown_button || assigned_to}
 				</div>
 				${modified}
 				${comment_count}
@@ -1178,6 +1204,7 @@ frappe.views.ListView = class ListView extends frappe.views.BaseList {
 	setup_list_click() {
 		this.$result.on("click", ".list-row, .image-view-header, .file-header", (e) => {
 			const $target = $(e.target);
+
 			// tick checkbox if Ctrl/Meta key is pressed
 			if (e.ctrlKey || (e.metaKey && !$target.is("a"))) {
 				const $list_row = $(e.currentTarget);
@@ -1187,6 +1214,10 @@ frappe.views.ListView = class ListView extends frappe.views.BaseList {
 				this.on_row_checked();
 				return;
 			}
+
+			// don't open form, but propagate the event up
+			if ($target.is("[data-toggle='dropdown']")) return true;
+
 			// don't open form when checkbox, like, filterable are clicked
 			if (
 				$target.hasClass("filterable") ||
@@ -1217,6 +1248,19 @@ frappe.views.ListView = class ListView extends frappe.views.BaseList {
 			const $button = $(e.currentTarget);
 			const doc = this.data[$button.attr("data-idx")];
 			this.settings.button.action(doc);
+			e.stopPropagation();
+			return false;
+		});
+
+		this.$result.on("click", ".inner-group-button .dropdown-item", (e) => {
+			const $button = $(e.currentTarget);
+			const doc = this.data[$button.attr("data-idx")];
+			const btnIdx = $button.attr("data-button-idx");
+			const action = this.settings.dropdown_button.buttons.find(
+				(b) => b.idx == btnIdx
+			).action;
+			action(doc);
+
 			e.stopPropagation();
 			return false;
 		});
